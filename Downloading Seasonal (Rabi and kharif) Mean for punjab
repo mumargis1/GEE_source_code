@@ -1,0 +1,49 @@
+var study_area = ee.FeatureCollection('users/mumargis/Punjab');
+var study_area_ = study_area.geometry();
+
+var Kharif_2020 = ee.ImageCollection('MODIS/MOD09GA_006_NDVI').filter(ee.Filter.date('2020-04-01', '2020-12-01'))
+  .map(function(image){return image.clip(study_area_)}).mean();
+
+var Rabbi_2020 = ee.ImageCollection('MODIS/MOD09GA_006_NDVI').filter(ee.Filter.date('2020-10-01', '2021-05-01'))
+  .map(function(image){return image.clip(study_area_)}).mean();
+
+var Kharif_2020 = Kharif_2020.select('NDVI');
+var Rabbi_2020 = Rabbi_2020.select('NDVI');
+
+var colorizedVis = {
+  min: 0.0, 
+  max: 1.0,
+  palette: [
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+  ],
+};
+///////////////// KHARIF //////////////////////////////
+// Map.addLayer(Kharif_2005, colorizedVis, 'Kharif_2005');
+
+Export.image.toDrive({image: Kharif_2020,
+  description: "Kharif_2020",
+  folder: "GEE data",
+  fileNamePrefix: "Kharif_2020",
+  region: study_area_,
+  scale: 500,
+  crs: "EPSG:32643",
+  maxPixels:9066245760,
+  shardSize: 100,
+  fileFormat: "GeoTIFF"
+});
+////////////////////////////// RABBI ///////////////////////////////
+// Map.addLayer(Rabbi_2005, colorizedVis, 'Rabbi_2005');
+
+Export.image.toDrive({image: Rabbi_2020,
+  description: "Rabbi_2020",
+  folder: "GEE data",
+  fileNamePrefix: "Rabbi_2020",
+  region: study_area_,
+  scale: 500,
+  crs: "EPSG:32643",
+  maxPixels:9066245760,
+  shardSize: 100,
+  fileFormat: "GeoTIFF"
+});
