@@ -1,0 +1,93 @@
+//  1. Setup
+var karachi = ee.FeatureCollection("users/mumargis/karachi");
+var NL = karachi.geometry();
+
+var start_period = ee.Date('1998-01-01');
+var end_period = ee.Date(new Date().getTime());
+
+var ERA5 = ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY")
+                .filter(ee.Filter.date(start_period, end_period))
+                // .filter(ee.Filter.calendarRange(10,6,'month'))
+                .filter(ee.Filter.bounds(karachi));
+var ERA5NL = ERA5.map(function(image){ return image.clip(karachi)});
+Map.centerObject(karachi); 
+
+// 2. Calculate wind speed as windspeed band 
+var ERA5windspeed = ERA5NL.map(function(image){
+  var wind_10m = image.expression(
+    'sqrt(u**2 + v**2)', {
+      'u': image.select('u_component_of_wind_10m'),
+      'v': image.select('v_component_of_wind_10m')
+    }).rename('windspeed');
+    var time = image.get('system:time_start');
+    return wind_10m.set('system:time_start', time);
+  
+});
+
+//  2. Calculate wind speed as windspeed band
+var ERA5windspeed = ERA5NL.map(function(image){
+  var wind_10m = image.expression(
+    'sqrt(u**2 + v**2)', {
+      'u': image.select('u_component_of_wind_10m'),
+      'v': image.select('v_component_of_wind_10m')
+  }).rename('windspeed');
+  var time = image.get('system:time_start');
+  return wind_10m.set('system:time_start', time) } );
+
+// Calculate Mean Wind Speed  
+var ERA5meanspeed = ERA5windspeed.map(function(image){
+  var meandict = image.select('windspeed').reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: NL
+  })
+  return image.set(meandict);
+});
+
+// 4. Calculate Wind direction 
+var ERA5winddir = ERA5NL.map(function(image){
+  var winddir = image.expression(
+    'mod(180 + (180/3.14) * atan2(v,u),360)', {
+      'u': image.select('u_component_of_wind_10m'), 
+      'v': image.select('v_component_of_wind_10m')
+    }).rename('winddir');
+    var time = image.get('system:time_start');
+    return winddir.set('system:time_start', time)
+  
+});
+    
+// calculate mean wind speed 
+var ERA5meandir = ERA5winddir.map(function(image){
+  var meandict = image.select('winddir').reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: NL
+  })
+  return image.set(meandict)
+});
+
+// 6. join wind speed and wind direction
+var filter = ee.Filter.equals({
+  leftField: 'system:index',
+  rightField: 'system:index',
+});
+
+// Define the join 
+var innerjoin = ee.Join.inner('primary', 'secondary');
+
+var ERA5total = innerjoin.apply(ERA5meanspeed, ERA5meandir, filter).map(function(f){
+  var img1 = f.get('primary')
+  var img2 = f.get('secondary')
+  return ee.Feature(null).copyProperties(img1).copyProperties(img2)
+})
+
+//7. Filter out wind speeds > 3 m/s and keep only yyyymmdd in output table
+// var ERA5x = ERA5total.filter(ee.Filter.lt('windspeed',3.0))  //select only wind speeds < 3 m/s
+var ERA5x = ERA5total.map(function(image){
+      var yyyymmdd = ee.String(image.get('system:index')).slice(0,8) //slice date: only yyyymmdd left
+    return image.set('date', yyyymmdd)
+});
+
+Export.table.toDrive({
+  collection: ERA5x.sort('windspeed'),
+  description: 'NL_mean_wind',
+  selectors: ['date', 'windspeed', 'winddir']
+});
