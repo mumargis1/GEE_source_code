@@ -1,0 +1,60 @@
+var roi_ = ee.FeatureCollection('users/mumargis/City_Riyadh_updated');
+var roi = roi_.geometry();
+
+var image = ee.ImageCollection('LANDSAT/LC08/C01/T1_TOA')
+                  .filterDate('2013-02-20', '2013-12-31')
+                  .filterMetadata('CLOUD_COVER','less_than', 1)
+                  .mean()
+                  .clip(roi);
+                  
+
+Map.addLayer(image, {bands:['B5', 'B4', 'B3']}, 'Sentinal2017');
+// Map.centerObject(roi, 8);
+// Map.addLayer(roi, {}, 'SF', false);
+
+
+
+var training = forest1.merge(urban1).merge(barren1);
+print(training);
+
+var label = 'Class';
+var bands = ['B1', 'B2','B3', 'B4', 'B5', 'B6', 'B7','B10', 'B11'];
+var input = image.select(bands);
+
+var trainImage = input.sampleRegions({
+  collection: training,
+  properties: [label], 
+  scale: 10
+});
+
+
+var trainingData = trainImage.randomColumn();
+var trainSet = trainingData.filter(ee.Filter.lessThan('random', 0.8));
+var testSet = trainingData.filter(ee.Filter.greaterThanOrEquals('random', 0.8));
+
+var classifier = ee.Classifier.smileCart().train(trainingData, label, bands);
+
+var classified = input.classify(classifier)
+
+var landcoverPalette = [
+  'FF0105', //urban (0)
+  'F9B164', //barren (1)
+  '1E6312', //forest (2)
+  
+  ]
+
+Map.addLayer(classified.clip(roi), {palette: landcoverPalette, min:0, max:2}, 'Classification CART')
+
+var viz = { min:0, max:2, palette: landcoverPalette};
+
+Export.image.toDrive({
+    // image: classified.clip(roi),
+    image: image.clip(roi).select(['B5', 'B4', 'B3']),
+    // description: 'Classified_2013',
+    description: 'original_2013',
+    folder: 'Upwork',  
+    region: roi, 
+    scale: 10,
+    maxPixels: 1e13,
+    }); 
+
