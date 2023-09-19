@@ -1,0 +1,94 @@
+var roi_ = ee.FeatureCollection('users/mumargis/City_Riyadh_updated');
+var roi = roi_.geometry();
+
+function maskS2clouds(image) {
+  var qa = image.select('QA60');
+  // Bits 10 and 11 are clouds and cirrus, respectively.
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+  // Both flags should be set to zero, indicating clear conditions.
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+      .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+  return image.updateMask(mask).divide(10000);
+}
+
+var image = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+  .filterDate('2023-2-01', '2023-12-30')
+  // .filterDate('2017-04-01', '2018-12-30')
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 2))
+  .filterBounds(roi)
+  .map(maskS2clouds)
+  // .median();
+  .mean();
+
+
+
+
+var visParmsTrue = {min:0, max:0.3,gamma:1.1, bands:['B4', 'B3', 'B2']};
+Map.addLayer(image.clip(roi), visParmsTrue, 'Sentinal2017');
+// Map.centerObject(roi, 12)
+// Map.setCenter(83.277, 17.7009, 12);
+// Map.addLayer(study_area_, {}, 'riyadh');
+
+
+
+var training = forest.merge(urban).merge(barren);
+print(training);
+
+var label = 'Class';
+var bands = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12'];
+var input = image.select(bands);
+
+var trainImage = input.sampleRegions({
+  collection: training,
+  properties: [label], 
+  scale: 10
+});
+
+
+var trainingData = trainImage.randomColumn();
+var trainSet = trainingData.filter(ee.Filter.lessThan('random', 0.8));
+var testSet = trainingData.filter(ee.Filter.greaterThanOrEquals('random', 0.8));
+
+var classifier = ee.Classifier.smileCart().train(trainSet, label, bands);
+
+var classified = input.classify(classifier)
+
+var landcoverPalette = [
+  'FF0105', //urban (0)
+  'F9B164', //barren (1)
+  '1E6312', //forest (2)
+  
+  
+  ]
+
+Map.addLayer(classified.clip(roi), {palette: landcoverPalette, min:0, max:2}, 'Classification CART')
+
+var confusionMatrix = ee.ConfusionMatrix(testSet.classify(classifier)
+  .errorMatrix({
+    actual:"Class",
+    predicted: 'classification'
+  }));
+  
+print('confusionMatrix',confusionMatrix);
+print('OverallAccuracy', confusionMatrix.accuracy());
+
+var viz = { min:0, max:2, palette: landcoverPalette}
+
+// Export.image.toDrive({
+//     image: classified.clip(roi),
+//     description: 'Classified_2023_3Class',
+//     folder: 'Upwork',  
+//     region: roi, 
+//     scale: 10,
+//     maxPixels: 1e13,
+//     });
+
+Export.image.toDrive({
+    image: classified.clip(roi),
+    description: 'Classified_2023_3Class',
+    folder: 'Upwork',  
+    region: roi, 
+    scale: 10,
+    maxPixels: 1e13,
+    });
