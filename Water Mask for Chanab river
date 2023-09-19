@@ -1,0 +1,55 @@
+
+//////////////////////////////////////////////////////////////
+// Asset List
+//////////////////////////////////////////////////////////////
+var study_area = ee.FeatureCollection('users/mumargis/river_chanab');
+var study_area_ = study_area.geometry();
+
+var gsw = ee.Image('JRC/GSW1_2/GlobalSurfaceWater');
+var occurrence = gsw.select('occurrence').clip(study_area_)
+
+//////////////////////////////////////////////////////////////
+// Constants
+//////////////////////////////////////////////////////////////
+
+var VIS_OCCURRENCE = {
+  min:0,
+  max:100,
+  palette: ['red', 'blue']
+};
+var VIS_WATER_MASK = {
+  palette: ['white', 'black']
+};
+
+// Create a water mask layer, and set the image mask so that non-water areas
+// are opaque.
+var water_mask = occurrence.gt(90).unmask(0);
+
+
+Map.addLayer({
+  eeObject: water_mask,
+  visParams: VIS_WATER_MASK,
+  name: '90% occurrence water mask',
+  shown: false
+});
+Map.addLayer({
+  eeObject: occurrence.updateMask(occurrence.divide(100)),
+  name: "Water Occurrence (1984-2015)",
+  visParams: VIS_OCCURRENCE
+});
+
+// Map.addLayer({eeObject: occurrence, name: 'Water Occurrence (1984-2015)'});
+// Export.image.toAsset(water_mask)
+
+Export.image.toDrive({image: occurrence,
+  description: "WaterOccuranceChanab",
+  folder: "GEE data",
+  fileNamePrefix: "water_occurance",
+  region: study_area_,
+  scale: 30,
+
+  maxPixels:9066245760,
+  shardSize: 100,
+
+  fileFormat: "GeoTIFF"
+});
