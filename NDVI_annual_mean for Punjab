@@ -1,0 +1,30 @@
+var study_area = ee.FeatureCollection('users/mumargis/study_area_dissolve');
+var study_area_ = study_area.geometry();
+
+var dataset = ee.ImageCollection('MODIS/006/MOD13Q1')
+                  .filter(ee.Filter.date('2012-07-30', '2012-08-31'))  
+                  .map(function(image){return image.clip(study_area_)}).mean();
+var ndvi = dataset.select('NDVI');
+var ndviVis = {
+  min: 0.0,
+  max: 8000.0,
+  palette: [
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+  ],
+};
+// Map.setCenter(6.746, 46.529, 2);
+Map.addLayer(ndvi, ndviVis, 'NDVI');
+
+Export.image.toDrive({image: dataset,
+  description: "ndvi_2012_2nd_P",
+  folder: "GEE data",
+  fileNamePrefix: "ndvi_2012",
+  region: study_area_,
+  scale: 250,
+  crs: "EPSG:32643",
+  maxPixels:99662457600,
+  // shardSize: 100,
+  fileFormat: "GeoTIFF"
+});
